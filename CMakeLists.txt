@@ -14,7 +14,7 @@ add_executable(voxel-gi-demo
     "src/application.cpp"
     "src/texture.cpp"
 	"src/mesh.cpp"
-)
+ "src/camera.h" "src/camera.cpp")
 target_compile_features(voxel-gi-demo PRIVATE cxx_std_20)
 target_link_libraries(voxel-gi-demo PRIVATE CGFramework)
 enable_sanitizers(voxel-gi-demo)

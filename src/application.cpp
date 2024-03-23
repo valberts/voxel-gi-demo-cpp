@@ -20,14 +20,19 @@ DISABLE_WARNINGS_POP()
 #include <functional>
 #include <iostream>
 #include <vector>
+#include "camera.h"
 
+// The Application class encapsulates the entire application, including setup, event handling, and rendering.
 class Application {
 public:
+    // Application constructor: initializes the application, creating a window and loading resources.
     Application()
         : m_window("Voxel GI Demo", glm::ivec2(1024, 1024), OpenGLVersion::GL45) // setup window with dimensions 1024x1024 and OpenGL 4.5
-        , m_texture("resources/checkerboard.png")
+        , m_camera(&m_window, glm::vec3(-1.0f, 0.2f, -0.5f), glm::vec3(1.0f, 0.0f, 0.4f)) // setup camera with position and forward
+        , m_texture("resources/checkerboard.png") // load an image texture from resources
     {
            
+        // Register input and call appropriate methods
         m_window.registerKeyCallback([this](int key, int scancode, int action, int mods) {
             if (action == GLFW_PRESS)
                 onKeyPressed(key, mods);
@@ -42,8 +47,10 @@ public:
                 onMouseReleased(button, mods);
         });
 
+        // Load the 3D model into GPU memory.
         m_meshes = GPUMesh::loadMeshGPU("resources/dragon.obj");
 
+        // Setup shaders for rendering, including vertex and fragment shaders for default and shadow effects.
         try {
             ShaderBuilder defaultBuilder;
             defaultBuilder.addStage(GL_VERTEX_SHADER, "shaders/shader_vert.glsl");
@@ -59,11 +66,14 @@ public:
             //     Visual Studio: PROJECT => Generate Cache for ComputerGraphics
             //     VS Code: ctrl + shift + p => CMake: Configure => enter
             // ....
+
+            // Note: Shaders must be compiled and linked successfully. Handle exceptions accordingly.
         } catch (ShaderLoadingException e) {
             std::cerr << e.what() << std::endl;
         }
     }
 
+    // Main game/rendering loop
     void update()
     {
         int dummyInteger = 0; // Initialized to 0
@@ -71,6 +81,8 @@ public:
             // This is your game loop
             // Put your real-time logic and rendering in here
             m_window.updateInput();
+            m_camera.updateInput();
+            //std::cout << m_camera.toString() << std::endl; // debug camera position and forward if needed
 
             // Use ImGui for easy input/output of ints, floats, strings, etc...
             ImGui::Begin("Window");
@@ -86,16 +98,26 @@ public:
             // ...
             glEnable(GL_DEPTH_TEST);
 
-            const glm::mat4 mvpMatrix = m_projectionMatrix * m_viewMatrix * m_modelMatrix;
+            // Calculate MVP (Model-View-Projection) matrix for transforming vertices.
+            const glm::mat4 mvpMatrix = m_projectionMatrix * m_camera.viewMatrix() * m_modelMatrix;
             // Normals should be transformed differently than positions (ignoring translations + dealing with scaling):
             // https://paroj.github.io/gltut/Illumination/Tut09%20Normal%20Transformation.html
+
+            // Calculate a matrix for transforming normals properly.
             const glm::mat3 normalModelMatrix = glm::inverseTranspose(glm::mat3(m_modelMatrix));
 
+            // Render each mesh in the scene.
             for (GPUMesh& mesh : m_meshes) {
+                // Bind the shader program that will be used for rendering. This tells OpenGL to use the shader's vertex and fragment shaders for drawing commands.
                 m_defaultShader.bind();
+                // Pass the Model-View-Projection matrix to the vertex shader. This transforms vertices from model space to clip space.
+                // https://jsantell.com/model-view-projection/
                 glUniformMatrix4fv(0, 1, GL_FALSE, glm::value_ptr(mvpMatrix));
+                // The object's translation, rotation, and scsale transform. Multiplying a vertex by the model matrix transforms the vector into world space.
                 glUniformMatrix4fv(1, 1, GL_FALSE, glm::value_ptr(m_modelMatrix));
                 glUniformMatrix3fv(2, 1, GL_FALSE, glm::value_ptr(normalModelMatrix));
+
+                // Check if the current mesh has texture coordinates. This determines if a texture will be used for rendering.
                 if (mesh.hasTextureCoords()) {
                     m_texture.bind(GL_TEXTURE0);
                     glUniform1i(3, 0);
@@ -153,6 +175,8 @@ public:
 
 private:
     Window m_window;
+
+    Camera m_camera;
 
     // Shader for default rendering and for depth rendering
     Shader m_defaultShader;
