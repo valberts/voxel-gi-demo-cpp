@@ -8,14 +8,16 @@ DISABLE_WARNINGS_PUSH()
 DISABLE_WARNINGS_POP()
 
 Camera::Camera(Window* pWindow)
-    : Camera(pWindow, glm::vec3(0), glm::vec3(0, 0, -1))
+    : Camera(pWindow, glm::vec3(0), glm::vec3(0, 0, -1), 0.0f, 0.0f)
 {
 }
 
-Camera::Camera(Window* pWindow, const glm::vec3& pos, const glm::vec3& forward)
+Camera::Camera(Window* pWindow, const glm::vec3& pos, const glm::vec3& forward, float moveSpeed, float lookSpeed)
     : m_position(pos)
     , m_forward(glm::normalize(forward))
     , m_pWindow(pWindow)
+    , m_moveSpeed(moveSpeed)
+    , m_lookSpeed(lookSpeed)
 {
 }
 
@@ -54,27 +56,24 @@ void Camera::rotateY(float angle)
 
 void Camera::updateInput()
 {
-    constexpr float moveSpeed = 0.05f;
-    constexpr float lookSpeed = 0.0035f;
-
     if (m_userInteraction) {
         glm::vec3 localMoveDelta{ 0 };
         const glm::vec3 right = glm::normalize(glm::cross(m_forward, m_up));
         if (m_pWindow->isKeyPressed(GLFW_KEY_A))
-            m_position -= moveSpeed * right;
+            m_position -= m_moveSpeed * right;
         if (m_pWindow->isKeyPressed(GLFW_KEY_D))
-            m_position += moveSpeed * right;
+            m_position += m_moveSpeed * right;
         if (m_pWindow->isKeyPressed(GLFW_KEY_W))
-            m_position += moveSpeed * m_forward;
+            m_position += m_moveSpeed * m_forward;
         if (m_pWindow->isKeyPressed(GLFW_KEY_S))
-            m_position -= moveSpeed * m_forward;
+            m_position -= m_moveSpeed * m_forward;
         if (m_pWindow->isKeyPressed(GLFW_KEY_R))
-            m_position += moveSpeed * m_up;
+            m_position += m_moveSpeed * m_up;
         if (m_pWindow->isKeyPressed(GLFW_KEY_F))
-            m_position -= moveSpeed * m_up;
+            m_position -= m_moveSpeed * m_up;
 
         const glm::dvec2 cursorPos = m_pWindow->getCursorPos();
-        const glm::vec2 delta = lookSpeed * glm::vec2(cursorPos - m_prevCursorPos);
+        const glm::vec2 delta = m_lookSpeed * glm::vec2(cursorPos - m_prevCursorPos);
         m_prevCursorPos = cursorPos;
 
         if (m_pWindow->isMouseButtonPressed(GLFW_MOUSE_BUTTON_LEFT)) {

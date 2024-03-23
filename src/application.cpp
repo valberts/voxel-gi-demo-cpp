@@ -28,7 +28,7 @@ public:
     // Application constructor: initializes the application, creating a window and loading resources.
     Application()
         : m_window("Voxel GI Demo", glm::ivec2(1024, 1024), OpenGLVersion::GL45) // setup window with dimensions 1024x1024 and OpenGL 4.5
-        , m_camera(&m_window, glm::vec3(-1.0f, 0.2f, -0.5f), glm::vec3(1.0f, 0.0f, 0.4f)) // setup camera with position and forward
+        , m_camera(&m_window, glm::vec3(-1.0f, 0.2f, -0.5f), glm::vec3(1.0f, 0.0f, 0.4f), 0.03f, 0.0035f) // setup camera with position, forward, move speed, and look speed
         , m_texture("resources/checkerboard.png") // load an image texture from resources
     {
            
@@ -48,7 +48,7 @@ public:
         });
 
         // Load the 3D model into GPU memory.
-        m_meshes = GPUMesh::loadMeshGPU("resources/dragon.obj");
+        m_meshes = GPUMesh::loadMeshGPU("resources/sponza/dragon.obj");
 
         // Setup shaders for rendering, including vertex and fragment shaders for default and shadow effects.
         try {
