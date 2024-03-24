@@ -49,6 +49,36 @@ struct VertexHash {
     }
 };
 
+// Defines a structure to uniquely identify vertices.
+struct VertexKey {
+    int vertexIndex; // Index of the vertex's position in the model's vertex list.
+    int normalIndex; // Index of the vertex's normal in the model's normal list.
+    int texcoordIndex; // Index of the vertex's texture coordinate in the model's texture coordinate list
+
+    // Overloads the equality operator to compare two VertexKeys.
+    // Returns true if both VertexKeys have the same vertex, normal, and texture coordinate indices.
+    bool operator==(const VertexKey& other) const
+    {
+        return vertexIndex == other.vertexIndex && normalIndex == other.normalIndex && texcoordIndex == other.texcoordIndex;
+    }
+};
+
+// Extends the std namespace to include a specialization of the std::hash template for the VertexKey struct.
+namespace std {
+    template <> struct hash<VertexKey> {
+        // Implements the hash function for VertexKey.
+        size_t operator()(const VertexKey& key) const {
+            size_t seed = 0;
+            hash_combine(seed, key.vertexIndex);
+            hash_combine(seed, key.normalIndex);
+            hash_combine(seed, key.texcoordIndex);
+            return seed; // Returns the final hash value generated from the vertex, normal, and texture coordinate indices.
+        }
+    };
+}
+
+// The issue is, tinyObjIndex.vertex_index is the position index and then we look up whether there is a vertex in that position.
+// but the previous implementation did not consider that there will have to be multiple vertices with the same position but different texcoords and normals
 std::vector<Mesh> loadMesh(const std::filesystem::path& file, bool centerAndNormalize)
 {
     if (!std::filesystem::exists(file)) {
@@ -85,7 +115,8 @@ std::vector<Mesh> loadMesh(const std::filesystem::path& file, bool centerAndNorm
                 prevMaterialID = shape.mesh.material_ids[endTriangle];
 
             Mesh mesh;
-            std::unordered_map<uint32_t, uint32_t> vertexCache; // Map the index of a vertex as loaded by tinyobjloader to its index in the generated mesh
+            // vertexCashe now uses type VertexKey, so we can uniquely identify vertices
+            std::unordered_map<VertexKey, uint32_t, std::hash<VertexKey>> vertexCache;
             for (size_t i = startTriangle * 3; i != endTriangle * 3; i += 3) {
                 const glm::vec3 v0 = construct_vec3(&inAttrib.vertices[3 * shape.mesh.indices[i + 0].vertex_index]);
                 const glm::vec3 v1 = construct_vec3(&inAttrib.vertices[3 * shape.mesh.indices[i + 1].vertex_index]);
@@ -94,28 +125,30 @@ std::vector<Mesh> loadMesh(const std::filesystem::path& file, bool centerAndNorm
 
                 // Load the triangle indices and lazily create the vertices.
                 glm::uvec3 triangle;
-                for (unsigned j = 0; j < 3; j++) {
+                // Loop over each vertex of the triangle (3 vertices per triangle).
+                for (unsigned j = 0; j < 3; ++j) {
                     const auto& tinyObjIndex = shape.mesh.indices[i + j];
-                    Vertex vertex {
-                        .position = construct_vec3(&inAttrib.vertices[3 * tinyObjIndex.vertex_index]),
-                        .normal = glm::vec3(0),
-                        .texCoord = glm::vec2(0)
-                    };
-                    if (tinyObjIndex.normal_index != -1 && !inAttrib.normals.empty())
-                        vertex.normal = glm::vec3(inAttrib.normals[3 * tinyObjIndex.normal_index + 0], inAttrib.normals[3 * tinyObjIndex.normal_index + 1], inAttrib.normals[3 * tinyObjIndex.normal_index + 2]);
-                    else
-                        vertex.normal = geometricNormal;
-                    if (tinyObjIndex.texcoord_index != -1 && !inAttrib.texcoords.empty())
-                        vertex.texCoord = glm::vec2(inAttrib.texcoords[2 * tinyObjIndex.texcoord_index + 0], inAttrib.texcoords[2 * tinyObjIndex.texcoord_index + 1]);
+                    // Creates a VertexKey struct instance for the current vertex using its position, normal, and texture coordinate indices.
+                    VertexKey key { tinyObjIndex.vertex_index, tinyObjIndex.normal_index, tinyObjIndex.texcoord_index };
 
-                    if (auto iter = vertexCache.find(tinyObjIndex.vertex_index); iter != std::end(vertexCache)) {
-                        // Already visited this vertex? Reuse it!
+                    Vertex vertex;
+                    vertex.position = construct_vec3(&inAttrib.vertices[3 * tinyObjIndex.vertex_index]);
+                    vertex.normal = (tinyObjIndex.normal_index != -1 && !inAttrib.normals.empty()) ? construct_vec3(&inAttrib.normals[3 * tinyObjIndex.normal_index]) : geometricNormal;
+                    vertex.texCoord = (tinyObjIndex.texcoord_index != -1 && !inAttrib.texcoords.empty()) ? glm::vec2(inAttrib.texcoords[2 * tinyObjIndex.texcoord_index], inAttrib.texcoords[2 * tinyObjIndex.texcoord_index + 1]) : glm::vec2(0.0f);
+
+                    // Look up in the cache
+                    auto iter = vertexCache.find(key);
+                    if (iter != vertexCache.end()) {
+                        // If the vertex exists in the cache, it reuses the existing vertex index for the current triangle vertex.
                         triangle[j] = iter->second;
-                    } else {                      
-                        // New vertex? Create it and store it in the vertex cache.
-                        vertexCache[tinyObjIndex.vertex_index] = triangle[j] = mesh.vertices.size();
+                    } else {
+                        // If the vertex does not exist in the cache, it assigns a new index, adds the vertex to the mesh, and updates the cache.
+                        uint32_t newIndex = static_cast<uint32_t>(mesh.vertices.size());
+                        vertexCache[key] = newIndex;
+                        triangle[j] = newIndex;
                         mesh.vertices.push_back(vertex);
                     }
+                    // Like this, vertices with different texcoord will still be unique even if they have the same position
                 }
                 mesh.triangles.push_back(triangle);
             }

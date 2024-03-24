@@ -48,7 +48,7 @@ public:
         });
 
         // Load the 3D model into GPU memory.
-        m_meshes = GPUMesh::loadMeshGPU("resources/sponza/dragon.obj");
+        m_meshes = GPUMesh::loadMeshGPU("resources/bunny.obj");
 
         // Setup shaders for rendering, including vertex and fragment shaders for default and shadow effects.
         try {
@@ -61,6 +61,16 @@ public:
             shadowBuilder.addStage(GL_VERTEX_SHADER, "shaders/shadow_vert.glsl");
             m_shadowShader = shadowBuilder.build();
 
+            ShaderBuilder atlasBuilder;
+            atlasBuilder.addStage(GL_VERTEX_SHADER, "shaders/atlas_vert.glsl");
+            atlasBuilder.addStage(GL_FRAGMENT_SHADER, "shaders/atlas_frag.glsl");
+            m_atlasShader = atlasBuilder.build();
+
+            ShaderBuilder textureBuilder;
+            textureBuilder.addStage(GL_VERTEX_SHADER, "shaders/texture_vert.glsl");
+            textureBuilder.addStage(GL_FRAGMENT_SHADER, "shaders/texture_frag.glsl");
+            m_textureShader = textureBuilder.build();
+
             // Any new shaders can be added below in similar fashion.
             // ==> Don't forget to reconfigure CMake when you do!
             //     Visual Studio: PROJECT => Generate Cache for ComputerGraphics
@@ -71,6 +81,42 @@ public:
         } catch (ShaderLoadingException e) {
             std::cerr << e.what() << std::endl;
         }
+
+        // Here we bind the atlas shader and then do all the stuff for that
+        glCreateFramebuffers(1, &atlasFBO);
+        glBindFramebuffer(GL_FRAMEBUFFER, atlasFBO);
+
+        glCreateTextures(GL_TEXTURE_2D, 1, &atlasTexture);
+        glBindTexture(GL_TEXTURE_2D, atlasTexture);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB32F, atlasWidth, atlasHeight, 0, GL_RGB, GL_FLOAT, nullptr);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+        glBindTexture(GL_TEXTURE_2D, 0);
+
+        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, atlasTexture, 0);
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+        // Texture shader
+           // Setup quad VAO and VBO
+        float quadVertices[] = {
+            // positions   // texCoords
+            -1.0f,  1.0f,  0.0f, 1.0f,
+            -1.0f,  0.0f,  0.0f, 0.0f,
+             0.0f,  0.0f,  1.0f, 0.0f,
+
+            -1.0f,  1.0f,  0.0f, 1.0f,
+             0.0f,  0.0f,  1.0f, 0.0f,
+             0.0f,  1.0f,  1.0f, 1.0f
+        };
+        glGenVertexArrays(1, &quadVAO);
+        glGenBuffers(1, &quadVBO);
+        glBindVertexArray(quadVAO);
+        glBindBuffer(GL_ARRAY_BUFFER, quadVBO);
+        glBufferData(GL_ARRAY_BUFFER, sizeof(quadVertices), quadVertices, GL_STATIC_DRAW);
+        glEnableVertexAttribArray(0);
+        glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void*)0);
+        glEnableVertexAttribArray(1);
+        glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void*)(2 * sizeof(float)));
     }
 
     // Main game/rendering loop
@@ -116,8 +162,9 @@ public:
                 // The object's translation, rotation, and scsale transform. Multiplying a vertex by the model matrix transforms the vector into world space.
                 glUniformMatrix4fv(1, 1, GL_FALSE, glm::value_ptr(m_modelMatrix));
                 glUniformMatrix3fv(2, 1, GL_FALSE, glm::value_ptr(normalModelMatrix));
-
+                
                 // Check if the current mesh has texture coordinates. This determines if a texture will be used for rendering.
+
                 if (mesh.hasTextureCoords()) {
                     m_texture.bind(GL_TEXTURE0);
                     glUniform1i(3, 0);
@@ -128,6 +175,31 @@ public:
                     glUniform1i(5, m_useMaterial);
                 }
                 mesh.draw(m_defaultShader);
+
+                // Do all atlas rendering here
+                glBindFramebuffer(GL_FRAMEBUFFER, atlasFBO);
+                glViewport(0, 0, atlasWidth, atlasHeight);
+                glClearColor(0.4f, 0.4f, 0.4f, 1.0f);
+                glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+                
+                m_atlasShader.bind();
+                // Pass the Model-View-Projection matrix to the vertex shader. This transforms vertices from model space to clip space.
+                glUniformMatrix4fv(0, 1, GL_FALSE, glm::value_ptr(m_projectionMatrix * m_viewMatrix * m_modelMatrix));
+                // The object's translation, rotation, and scsale transform. Multiplying a vertex by the model matrix transforms the vector into world space.
+                glUniformMatrix4fv(1, 1, GL_FALSE, glm::value_ptr(m_modelMatrix));
+                glUniformMatrix3fv(2, 1, GL_FALSE, glm::value_ptr(normalModelMatrix));
+                glUniform1i(4, GL_FALSE);
+                glUniform1i(5, m_useMaterial);
+                mesh.draw(m_atlasShader);
+                glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+                // Texture shader stuff
+                m_textureShader.bind();
+                glBindVertexArray(quadVAO);
+                glBindTexture(GL_TEXTURE_2D, atlasTexture); // Ensure this is the texture you want to display
+                glUniform1i(3, 0);
+                glDrawArrays(GL_TRIANGLES, 0, 6);
+                glBindVertexArray(0);
             }
 
             // Processes input and swaps the window buffer
@@ -181,6 +253,8 @@ private:
     // Shader for default rendering and for depth rendering
     Shader m_defaultShader;
     Shader m_shadowShader;
+    Shader m_atlasShader;
+    Shader m_textureShader;
 
     std::vector<GPUMesh> m_meshes;
     Texture m_texture;
@@ -190,6 +264,14 @@ private:
     glm::mat4 m_projectionMatrix = glm::perspective(glm::radians(80.0f), 1.0f, 0.1f, 30.0f);
     glm::mat4 m_viewMatrix = glm::lookAt(glm::vec3(-1, 1, -1), glm::vec3(0), glm::vec3(0, 1, 0));
     glm::mat4 m_modelMatrix { 1.0f };
+
+    // Atlas variables
+    GLuint atlasFBO, atlasTexture;
+    const int atlasWidth = 1024;
+    const int atlasHeight = 1024;
+
+    // Texture variables
+    GLuint quadVAO, quadVBO;
 };
 
 int main()
