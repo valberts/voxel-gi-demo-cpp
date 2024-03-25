@@ -49,6 +49,8 @@ public:
 
         // Load the 3D model into GPU memory.
         m_meshes = GPUMesh::loadMeshGPU("resources/bunny.obj");
+        // Load the cube model into GPU memory.
+        m_cubeMesh = GPUMesh::loadMeshGPU("resources/cube.obj");
 
         // Setup shaders for rendering, including vertex and fragment shaders for default and shadow effects.
         try {
@@ -97,17 +99,24 @@ public:
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
         // Texture shader
-           // Setup quad VAO and VBO
-        float quadVertices[] = {
-            // positions   // texCoords
-            -1.0f,  1.0f,  0.0f, 1.0f,
-            -1.0f,  0.0f,  0.0f, 0.0f,
-             0.0f,  0.0f,  1.0f, 0.0f,
+        
+        float scale = 0.5f; // Adjust this value to scale the quad size
+        // Calculate the translation needed to move the scaled quad to the top left corner
+        float translateX = -1.0f + (scale * 1.0f); // Move it left to the edge, then adjust for scaling
+        float translateY = 1.0f - (scale * 1.0f); // Move it up to the edge, then adjust for scaling
 
-            -1.0f,  1.0f,  0.0f, 1.0f,
-             0.0f,  0.0f,  1.0f, 0.0f,
-             0.0f,  1.0f,  1.0f, 1.0f
+        float quadVertices[] = {
+            // positions (scaled and translated)     // texCoords
+            (-1.0f * scale + translateX),  (1.0f * scale + translateY),  0.0f, 1.0f,
+            (-1.0f * scale + translateX),  (0.0f * scale + translateY),  0.0f, 0.0f,
+            (0.0f * scale + translateX),  (0.0f * scale + translateY),  1.0f, 0.0f,
+
+            (-1.0f * scale + translateX),  (1.0f * scale + translateY),  0.0f, 1.0f,
+            (0.0f * scale + translateX),  (0.0f * scale + translateY),  1.0f, 0.0f,
+            (0.0f * scale + translateX),  (1.0f * scale + translateY),  1.0f, 1.0f
         };
+
+
         glGenVertexArrays(1, &quadVAO);
         glGenBuffers(1, &quadVBO);
         glBindVertexArray(quadVAO);
@@ -155,6 +164,7 @@ public:
             // Render each mesh in the scene.
             for (GPUMesh& mesh : m_meshes) {
                 // Bind the shader program that will be used for rendering. This tells OpenGL to use the shader's vertex and fragment shaders for drawing commands.
+                
                 m_defaultShader.bind();
                 // Pass the Model-View-Projection matrix to the vertex shader. This transforms vertices from model space to clip space.
                 // https://jsantell.com/model-view-projection/
@@ -179,7 +189,7 @@ public:
                 // Do all atlas rendering here
                 glBindFramebuffer(GL_FRAMEBUFFER, atlasFBO);
                 glViewport(0, 0, atlasWidth, atlasHeight);
-                glClearColor(0.4f, 0.4f, 0.4f, 1.0f);
+                glClearColor(INVALID_COLOR, INVALID_COLOR, INVALID_COLOR, INVALID_COLOR);
                 glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
                 
                 m_atlasShader.bind();
@@ -193,6 +203,9 @@ public:
                 mesh.draw(m_atlasShader);
                 glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
+                // reset viewport
+                glViewport(0, 0, m_window.getWindowSize().x, m_window.getWindowSize().y);
+
                 // Texture shader stuff
                 m_textureShader.bind();
                 glBindVertexArray(quadVAO);
@@ -200,6 +213,48 @@ public:
                 glUniform1i(3, 0);
                 glDrawArrays(GL_TRIANGLES, 0, 6);
                 glBindVertexArray(0);
+
+                // Voxel stuff
+                std::vector<glm::vec3> validTexels; // This will store the valid world positions read from the texture.
+                int texWidth = atlasWidth, texHeight = atlasHeight;
+                std::vector<glm::vec3> texData(texWidth * texHeight);
+
+                // Bind the texture to ensure we're reading the right one.
+                glBindTexture(GL_TEXTURE_2D, atlasTexture);
+                glGetTexImage(GL_TEXTURE_2D, 0, GL_RGB, GL_FLOAT, texData.data());
+
+                // Iterate through the texture data to find valid texels.
+                for (int y = 0; y < texHeight; ++y) {
+                    for (int x = 0; x < texWidth; ++x) {
+                        glm::vec3 worldPos = texData[y * texWidth + x];
+                        // INVALID_COLOR used to mark invalid texels
+                        if (worldPos != glm::vec3(INVALID_COLOR)) {
+                            validTexels.push_back(worldPos);
+
+                            // Calculate the model matrix for the cube
+                            glm::mat4 modelMatrix = glm::translate(glm::mat4(1.0f), worldPos);
+                            // Assuming uniform scaling of cubes, if needed
+                            modelMatrix = glm::scale(modelMatrix, glm::vec3(0.04f)); // Scale down the cube
+
+                            // Now render the cube
+                            m_defaultShader.bind();
+                            glUniformMatrix4fv(0, 1, GL_FALSE, glm::value_ptr(m_projectionMatrix * m_camera.viewMatrix() * modelMatrix));
+                            glUniformMatrix4fv(1, 1, GL_FALSE, glm::value_ptr(modelMatrix));
+                            // Since cubes are simple, normals might not need adjustment, but here's how you could calculate the matrix if needed.
+                            glm::mat3 normalModelMatrix = glm::inverseTranspose(glm::mat3(modelMatrix));
+                            glUniformMatrix3fv(2, 1, GL_FALSE, glm::value_ptr(normalModelMatrix));
+
+                            // Assume cubes have texture coordinates and a uniform material
+                            glUniform1i(4, GL_FALSE);
+                            glUniform1i(5, m_useMaterial);
+                            for (GPUMesh& mesh : m_cubeMesh) {
+                                mesh.draw(m_defaultShader);
+                            }
+
+                        }
+                    }
+                }
+
             }
 
             // Processes input and swaps the window buffer
@@ -257,6 +312,7 @@ private:
     Shader m_textureShader;
 
     std::vector<GPUMesh> m_meshes;
+    std::vector<GPUMesh> m_cubeMesh;
     Texture m_texture;
     bool m_useMaterial { true };
 
@@ -267,11 +323,15 @@ private:
 
     // Atlas variables
     GLuint atlasFBO, atlasTexture;
-    const int atlasWidth = 1024;
-    const int atlasHeight = 1024;
+    const int atlasWidth = 32; // paper uses 176x176 minimum
+    const int atlasHeight = 32;
+    const float INVALID_COLOR = 0.4f;
 
     // Texture variables
     GLuint quadVAO, quadVBO;
+
+    // Voxel variables
+    const int gridWidth = 64, gridHeight = 64, gridDepth = 128, voxelSize = 0.005f;
 };
 
 int main()
