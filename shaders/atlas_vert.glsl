@@ -13,7 +13,6 @@ layout(location = 2) in vec2 texCoord;
 out vec3 fragPosition;
 out vec3 fragNormal;
 out vec2 fragTexCoord;
-out vec3 worldPosition;
 
 void main()
 {
