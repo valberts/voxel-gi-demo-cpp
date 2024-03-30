@@ -9,6 +9,7 @@ layout(std140) uniform Material // Must match the GPUMaterial defined in src/mes
 };
 
 layout(location = 3) uniform int shadingMode;
+layout(location = 4) uniform vec3 lightPos;
 
 in vec3 fragPosition;
 in vec3 fragNormal;
@@ -18,7 +19,6 @@ layout(location = 0) out vec4 fragColor;
 
 void main()
 {
-    const vec3 lightPos = vec3(0.0, 10.0, 10.0);
     const vec3 lightColor = vec3(1.0, 1.0, 1.0); 
     vec3 lightDir = normalize(lightPos - fragPosition);
     

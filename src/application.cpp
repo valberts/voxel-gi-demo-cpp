@@ -29,7 +29,7 @@ public:
     // Application constructor: initializes the application, creating a window and loading resources.
     Application()
         : m_window("Voxel GI Demo", glm::ivec2(1024, 1024), OpenGLVersion::GL45) // setup window with dimensions 1024x1024 and OpenGL 4.5
-        , m_camera(&m_window, glm::vec3(-1.0f, 0.2f, -0.5f), glm::vec3(1.0f, 0.0f, 0.4f), 0.03f, 0.0035f) // setup camera with position, forward, move speed, and look speed
+        , m_camera(&m_window, glm::vec3(-1.44f, 0.5f, 2.3f), glm::vec3(0.5f, -0.2f, -0.8f), 0.03f, 0.0035f) // setup camera with position, forward, move speed, and look speed
         , m_texture("resources/checkerboard.png") // load an image texture from resources
     {
         setupInputCallbacks();
@@ -57,7 +57,7 @@ public:
     void processInput() {
         static glm::vec3 lastTranslation(0.0f);
         static glm::vec3 translation(0.0f);
-        const std::vector<int> atlasSizes = { 44, 88, 176, 368 };
+        const std::vector<int> atlasSizes = { 22, 44, 88, 176, 368, 768, 1280  };
         m_window.updateInput();
         m_camera.updateInput();
         //std::cout << m_camera.toString() << std::endl; // debug camera position and forward if needed
@@ -239,11 +239,13 @@ public:
             glUniform1i(4, GL_TRUE);
             glUniform1i(5, GL_FALSE);
             glUniform1i(6, m_shadingMode);
+            glUniform3fv(7, 1, glm::value_ptr(m_lightPos));
         }
         else {
             glUniform1i(4, GL_FALSE);
             glUniform1i(5, m_useMaterial);
             glUniform1i(6, m_shadingMode);
+            glUniform3fv(7, 1, glm::value_ptr(m_lightPos));
         }
         mesh.draw(m_defaultShader);
     }
@@ -254,6 +256,7 @@ public:
         glUniformMatrix4fv(0, 1, GL_FALSE, glm::value_ptr(m_projectionMatrix));
         glUniformMatrix4fv(1, 1, GL_FALSE, glm::value_ptr(m_camera.viewMatrix()));
         glUniform1i(3, m_shadingMode);
+        glUniform3fv(4, 1, glm::value_ptr(m_lightPos));
         glDrawElementsInstanced(GL_TRIANGLES, 36, GL_UNSIGNED_INT, 0, modelMatrices.size());
 
         glBindVertexArray(0);
@@ -303,10 +306,10 @@ public:
     }
 
     void recalculateVoxelGrid() {
+        m_voxelGrid.clearGrid();
         m_voxelGrid.calculateVoxelScale();
         validTexels.clear();
         modelMatrices.clear();
-        m_voxelGrid.clearGrid();
         voxelsReady = false;
     }
 
@@ -315,7 +318,7 @@ public:
     // mods - Any modifier keys pressed, like shift or control
     void onKeyPressed(int key, int mods)
     {
-        std::cout << "Key pressed: " << key << std::endl;
+        //std::cout << "Key pressed: " << key << std::endl;
     }
 
     // In here you can handle key releases
@@ -323,13 +326,13 @@ public:
     // mods - Any modifier keys pressed, like shift or control
     void onKeyReleased(int key, int mods)
     {
-        std::cout << "Key released: " << key << std::endl;
+        //std::cout << "Key released: " << key << std::endl;
     }
 
     // If the mouse is moved this function will be called with the x, y screen-coordinates of the mouse
     void onMouseMove(const glm::dvec2& cursorPos)
     {
-        std::cout << "Mouse at position: " << cursorPos.x << " " << cursorPos.y << std::endl;
+        //std::cout << "Mouse at position: " << cursorPos.x << " " << cursorPos.y << std::endl;
     }
 
     // If one of the mouse buttons is pressed this function will be called
@@ -337,7 +340,7 @@ public:
     // mods - Any modifier buttons pressed
     void onMouseClicked(int button, int mods)
     {
-        std::cout << "Pressed mouse button: " << button << std::endl;
+        //std::cout << "Pressed mouse button: " << button << std::endl;
     }
 
     // If one of the mouse buttons is released this function will be called
@@ -345,7 +348,7 @@ public:
     // mods - Any modifier buttons pressed
     void onMouseReleased(int button, int mods)
     {
-        std::cout << "Released mouse button: " << button << std::endl;
+        //std::cout << "Released mouse button: " << button << std::endl;
     }
 
 private:
@@ -374,8 +377,7 @@ private:
     glm::mat4 m_projectionMatrix = glm::perspective(glm::radians(80.0f), 1.0f, 0.1f, 30.0f);
     glm::mat4 m_viewMatrix = glm::lookAt(glm::vec3(-1, 1, -1), glm::vec3(0), glm::vec3(0, 1, 0));
     glm::mat4 m_modelMatrix { 1.0f };
-    float lightX = 0.0f, lightY = 3.0, lightZ = 3.0;
-    glm::vec3 m_lightPos{ lightX, lightY, lightZ };
+    glm::vec3 m_lightPos{ 0.0f, 10.0f, 10.0f };
 
     // Atlas variables
     GLuint atlasFBO, atlasTexture;
@@ -483,9 +485,8 @@ private:
         if (atlasTexture) {
             glDeleteTextures(1, &atlasTexture);
             glDeleteFramebuffers(1, &atlasFBO);
+            setupAtlasShader();
         }
-
-        setupAtlasShader();
     }
 
     void setupTextureShader() {
