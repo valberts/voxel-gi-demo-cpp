@@ -20,23 +20,23 @@ Implementation of an atlas-based boundary voxelization [1].
 
 ## User Interface
 
-`Shading mode 0: Diffuse lighting`
+- Shading mode 0: Diffuse lighting
 
-`Shading mode 1: World position to color`
+- Shading mode 1: World position to color
 
-`Render mode 0: Mesh rendering`
+- Render mode 0: Mesh rendering
 
-`Render mode 1: Voxel rendering`
+- Render mode 1: Voxel rendering
 
-`Atlas length: Side length in texels of the texture atlas`
+- Atlas length: Side length in texels of the texture atlas
 
-`Voxel grid length: How many voxels make up each side of the voxelized world region`
+- Voxel grid length: How many voxels make up each side of the voxelized world region
 
-`Translation: Move the mesh along the x, y, and z axis`
+- Translation: Move the mesh along the x, y, and z axis
 
-`Show atlas: Whether or not to display the texture atlas`
+- Show atlas: Whether or not to display the texture atlas
 
-`Show voxel grid bounds: Whether or not to show the bounds of the voxelized world region`
+- Show voxel grid bounds: Whether or not to show the bounds of the voxelized world region
 
 ## Screenshots
 
